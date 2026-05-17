@@ -31,44 +31,6 @@ body {
                     radial-gradient(ellipse at 80% 100%, rgba(232,200,64,0.06) 0%, transparent 60%);
 }
 
-/* API KEY MODAL */
-#api-modal {
-  position: fixed; inset: 0; z-index: 1000;
-  background: rgba(0,0,0,0.85);
-  display: flex; align-items: center; justify-content: center;
-  backdrop-filter: blur(8px);
-}
-.modal-box {
-  background: var(--surface);
-  border: 1px solid var(--border2);
-  border-radius: 16px;
-  padding: 2.5rem;
-  max-width: 440px;
-  width: 90%;
-  text-align: center;
-}
-.modal-box .trophy { font-size: 48px; margin-bottom: 1rem; }
-.modal-box h2 { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 2px; color: var(--accent); margin-bottom: 0.5rem; }
-.modal-box p { font-size: 14px; color: var(--muted); margin-bottom: 1.5rem; line-height: 1.6; }
-.modal-box input {
-  width: 100%; padding: 12px 16px;
-  background: var(--surface2); border: 1px solid var(--border2);
-  border-radius: 8px; color: var(--text); font-size: 14px;
-  margin-bottom: 12px; font-family: 'DM Sans', sans-serif;
-}
-.modal-box input:focus { outline: none; border-color: var(--accent); }
-.btn-primary {
-  width: 100%; padding: 13px;
-  background: var(--accent); color: #0a0e1a;
-  border: none; border-radius: 8px;
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 18px; letter-spacing: 1px;
-  cursor: pointer; transition: opacity 0.2s;
-}
-.btn-primary:hover { opacity: 0.85; }
-.modal-note { font-size: 12px; color: var(--muted); margin-top: 12px; }
-.modal-note a { color: var(--accent); text-decoration: none; }
-
 /* HEADER */
 header {
   padding: 1.5rem 2rem;
@@ -357,18 +319,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 2rem; }
 </head>
 <body>
 
-<!-- API KEY MODAL -->
-<div id="api-modal">
-  <div class="modal-box">
-    <div class="trophy">⚽</div>
-    <h2>Simulador Mundial 2026</h2>
-    <p>Ingresá tu API Key de Anthropic para activar la simulación con IA. La clave se guarda solo en tu navegador.</p>
-    <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." />
-    <button class="btn-primary" onclick="saveApiKey()">ENTRAR AL MUNDIAL</button>
-    <p class="modal-note">Obtené tu clave gratis en <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a></p>
-  </div>
-</div>
-
 <!-- HEADER -->
 <header>
   <div class="logo">MUNDIAL <span>2026</span></div>
@@ -380,8 +330,8 @@ main { max-width: 1200px; margin: 0 auto; padding: 2rem; }
     <button class="nav-tab" onclick="showSection('semis')">Semis</button>
     <button class="nav-tab" onclick="showSection('final')">Final</button>
   </nav>
-  <div class="api-indicator" id="api-indicator" style="display:none">
-    <span class="dot"></span> IA activa
+  <div class="api-indicator">
+    <span class="dot"></span> Simulador activo
   </div>
 </header>
 
@@ -462,7 +412,6 @@ main { max-width: 1200px; margin: 0 auto; padding: 2rem; }
 <div class="toast" id="toast"></div>
 
 <script>
-let API_KEY = '';
 
 // ============================================================
 //  DATA
@@ -506,27 +455,111 @@ const rounds = {
 };
 
 // ============================================================
-//  API KEY
+//  MOTOR DE SIMULACIÓN LOCAL — sin API, sin internet, gratis
+//  Ranking FIFA Mayo 2026 (aproximado)
 // ============================================================
-function saveApiKey() {
-  const v = document.getElementById('api-key-input').value.trim();
-  if (!v.startsWith('sk-ant')) { showToast('⚠ Clave inválida. Debe empezar con sk-ant'); return; }
-  API_KEY = v;
-  localStorage.setItem('mw2026_key', v);
-  document.getElementById('api-modal').style.display = 'none';
-  document.getElementById('api-indicator').style.display = 'flex';
-  initApp();
+const FIFA_RANK = {
+  "Argentina":1,"Francia":2,"España":3,"Inglaterra":4,"Brasil":5,
+  "Portugal":6,"Países Bajos":7,"Bélgica":8,"Alemania":9,"Uruguay":10,
+  "Colombia":11,"Marruecos":12,"Japón":13,"EE.UU.":14,"México":15,
+  "Croacia":16,"Senegal":17,"Suiza":18,"Noruega":19,"Turquía":20,
+  "Austria":21,"Corea del Sur":22,"Ecuador":23,"Suecia":24,"Rep. Checa":25,
+  "Irán":26,"Bosnia":27,"Canadá":28,"Ghana":29,"Túnez":30,
+  "Costa de Marfil":31,"Egipto":32,"Arabia Saudita":33,"Australia":34,
+  "Escocia":35,"Paraguay":36,"Qatar":37,"R.D. Congo":38,"Argelia":39,
+  "Uzbekistán":40,"Irak":41,"Jordania":42,"Panamá":43,"Sudáfrica":44,
+  "Nueva Zelanda":45,"Cabo Verde":46,"Haití":47,"Curazao":48
+};
+
+function getRating(name) {
+  const rank = FIFA_RANK[name] || 40;
+  // Convertir ranking en rating 0-100 (rank 1 = 95, rank 48 = 45)
+  return Math.round(95 - (rank - 1) * (50 / 47));
 }
-window.addEventListener('load', () => {
-  const saved = localStorage.getItem('mw2026_key');
-  if (saved) {
-    API_KEY = saved;
-    document.getElementById('api-key-input').value = saved;
-    document.getElementById('api-modal').style.display = 'none';
-    document.getElementById('api-indicator').style.display = 'flex';
-    initApp();
+
+function calcProbs(homeRating, awayRating) {
+  // Ventaja de local leve (+4 puntos)
+  const h = homeRating + 4;
+  const a = awayRating;
+  const diff = h - a; // diferencia de -50 a +54
+  // Probabilidad de victoria local: base 40%, ajustada por diferencia
+  const probH = Math.min(75, Math.max(10, 40 + diff * 0.6));
+  const probA = Math.min(70, Math.max(8, 35 - diff * 0.5));
+  const probD = Math.max(5, 100 - probH - probA);
+  const total = probH + probD + probA;
+  return {
+    ph: Math.round(probH / total * 100),
+    pd: Math.round(probD / total * 100),
+    pa: Math.round(100 - Math.round(probH/total*100) - Math.round(probD/total*100))
+  };
+}
+
+function simulateScore(homeRating, awayRating) {
+  const { ph, pd, pa } = calcProbs(homeRating, awayRating);
+  const rand = Math.random() * 100;
+  let outcome; // 'home', 'draw', 'away'
+  if (rand < ph) outcome = 'home';
+  else if (rand < ph + pd) outcome = 'draw';
+  else outcome = 'away';
+
+  // Goles: equipos mejores meten más (promedio 1.1 a 1.8 por partido)
+  const avgH = 0.8 + homeRating / 100 * 1.2;
+  const avgA = 0.8 + awayRating / 100 * 1.0;
+  const possScores = [[0,0],[1,0],[2,0],[3,0],[1,1],[2,1],[3,1],[2,2],[0,1],[0,2],[0,3],[1,2],[1,3]];
+
+  function randGoals(avg) {
+    const r = Math.random();
+    if (r < 0.22) return 0;
+    if (r < 0.52) return 1;
+    if (r < 0.75) return 2;
+    if (r < 0.90) return 3;
+    return 4;
   }
-});
+
+  let hg = randGoals(avgH), ag = randGoals(avgA);
+
+  // Ajustar resultado al outcome sorteado
+  if (outcome === 'home' && hg <= ag) { hg = ag + 1; }
+  if (outcome === 'away' && ag <= hg) { ag = hg + 1; }
+  if (outcome === 'draw') { const g = Math.min(hg, ag); hg = g; ag = g; }
+
+  return { hg, ag };
+}
+
+const COMMENTS_WIN = [
+  "Dominó el partido con solidez defensiva.",
+  "Gol en el segundo tiempo que selló la victoria.",
+  "Aprovechó sus oportunidades con eficacia.",
+  "Superioridad clara en el mediocampo.",
+  "Victoria trabajada ante un rival complicado.",
+  "La experiencia marcó la diferencia.",
+  "Contragolpes letales que dejaron al rival sin respuesta."
+];
+const COMMENTS_DRAW = [
+  "Partido equilibrado que terminó en empate justo.",
+  "Ambos equipos se anularon tácticamente.",
+  "Gol tardío que evitó la derrota.",
+  "Punto valioso para ambas selecciones.",
+  "Pocas ocasiones claras en un juego cerrado."
+];
+
+function getComment(hg, ag) {
+  if (hg === ag) return COMMENTS_DRAW[Math.floor(Math.random()*COMMENTS_DRAW.length)];
+  return COMMENTS_WIN[Math.floor(Math.random()*COMMENTS_WIN.length)];
+}
+
+async function callAI(homeN, awayN, knockout=false) {
+  const hR = getRating(homeN), aR = getRating(awayN);
+  const { ph, pd, pa } = calcProbs(hR, aR);
+  let { hg, ag } = simulateScore(hR, aR);
+  if (knockout && hg === ag) { hg++; } // no empate en eliminatorias
+  const comment = getComment(hg, ag);
+  // Simular pequeño delay para que se vea que "está pensando"
+  await sleep(400 + Math.random() * 600);
+  return { home_goals: hg, away_goals: ag, prob_home: ph, prob_draw: pd, prob_away: pa, comment };
+}
+
+window.addEventListener('load', () => { initApp(); });
 
 // ============================================================
 //  NAVIGATION
@@ -630,30 +663,8 @@ async function simGroupMatch(gk, mi, silent=false) {
 
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-sm"></span> Simulando...'; }
 
-  const prompt = `Eres un experto en fútbol. Simula el partido del Mundial 2026: ${home.n} vs ${away.n}.
-Responde SOLO con JSON válido sin texto extra ni backticks:
-{"home_goals":número,"away_goals":número,"prob_home":número,"prob_draw":número,"prob_away":número,"comment":"frase corta"}
-Las prob deben sumar 100. Usa ranking FIFA real y calidad actual de cada selección.`;
-
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-client-side-allow-unsafe': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 200,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    const data = await resp.json();
-    const text = data.content.map(c => c.text||'').join('');
-    const clean = text.replace(/```json|```/g,'').trim();
-    const r = JSON.parse(clean);
+    const r = await callAI(home.n, away.n, false);
 
     results[key] = { hg: r.home_goals, ag: r.away_goals, ph: r.prob_home, pd: r.prob_draw, pa: r.prob_away, comment: r.comment };
 
@@ -888,29 +899,8 @@ async function simKnockoutMatch(roundKey, idx, silent=false) {
   const btn = document.querySelector(`#bm-${match.id} .bracket-sim-btn`);
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
 
-  const prompt = `Simula el partido eliminatorio del Mundial 2026: ${match.home.n} vs ${match.away.n}. No hay empate (penalty si necesario).
-Responde SOLO JSON sin texto: {"home_goals":número,"away_goals":número,"prob_home":número,"prob_away":número,"comment":"frase breve"}
-Si hay empate en 90 min, ajusta el marcador final (incluyendo penales simbólicamente con +1 o diferencia). Las prob deben sumar 100.`;
-
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': API_KEY,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-client-side-allow-unsafe': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 150,
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-    const data = await resp.json();
-    const text = data.content.map(c => c.text||'').join('');
-    const clean = text.replace(/```json|```/g,'').trim();
-    const r = JSON.parse(clean);
+    const r = await callAI(match.home.n, match.away.n, true);
 
     match.homeGoals = r.home_goals;
     match.awayGoals = r.away_goals;
